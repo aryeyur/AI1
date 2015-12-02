@@ -41,7 +41,7 @@ def price_function(source_junction, target_junction, t0):
 
 
 def heuristic_function(source_junction, target_junction, t0):
-    return compute_distance(source_junction.lat, source_junction.lon, target_junction.lat, target_junction.lot)
+    return compute_distance(source_junction.lat, source_junction.lon, target_junction.lat, target_junction.lon)
 
 
 def format_result(last_node):
