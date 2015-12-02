@@ -1,6 +1,7 @@
-from collections import namedtuple
-from ways import load_map_from_csv
 import sys
+from collections import namedtuple
+
+from ways import load_map_from_csv, compute_distance
 
 Node = namedtuple('Node', ['junction', 'parent', 'g_value', 'h_value', 'f_value', ])
 
@@ -34,16 +35,24 @@ def list_find_node(node_list, node):
 
 def price_function(source_junction, target_junction, t0):
     for lnk in source_junction.links:
-        if lnk.target == target_junction:
-            return lnk.distance
+        if lnk.target == target_junction.index:
+            return roads.realtime_link_speed(lnk, t0)
     return sys.maxsize
 
 
 def heuristic_function(source_junction, target_junction, t0):
-    return
+    return compute_distance(source_junction.lat, source_junction.lon, target_junction.lat, target_junction.lot)
 
 
-def run_astar(source_junction_index, target_junction_index, price_func, heuristic_func, t0):
+def format_result(last_node):
+    top = last_node
+    all_indices = list()
+    while top is not None:
+        all_indices.append(top.index)
+
+
+def run_astar(source_junction_index, target_junction_index, t0, price_func=price_function,
+              heuristic_func=heuristic_function):
     global roads
     roads = load_map_from_csv()
     source_junction = roads.junctions()[source_junction_index]
@@ -58,7 +67,7 @@ def run_astar(source_junction_index, target_junction_index, price_func, heuristi
         best_node = get_best_node(open_list)
         closed_list.append(best_node)
         if best_node.junction == target_junction:
-            return best_node
+            return format_result(best_node)
         for son in children_of_junction(best_node):
             son_g_value = price_func(best_node, son, t0) + best_node.g_value
             son_in_open = list_find_node(open_list, son)
@@ -82,4 +91,3 @@ def run_astar(source_junction_index, target_junction_index, price_func, heuristi
             son_h_value = heuristic_func(son, target_junction, t0)
             open_list.append(Node(son, best_node, son_g_value, son_h_value, son_g_value + son_h_value))
     return None
-
