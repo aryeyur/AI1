@@ -1,6 +1,10 @@
 import sys
 from collections import namedtuple
 from ways import load_map_from_csv, compute_distance
+from ways.info import SPEED_RANGES
+from ways.tools import base_traffic_pattern
+import pqdict
+
 
 Node = namedtuple('Node', ['junction', 'parent', 'g_value', 'h_value', 'f_value', ])
 
@@ -18,6 +22,7 @@ def get_best_node(node_list):
 
 
 def children_of_junction(junction):
+    global roads
     children = list()
     for lnk in junction.links:
         if lnk.source == junction.index:
@@ -27,20 +32,30 @@ def children_of_junction(junction):
 
 def list_find_node(node_list, junction):
     for x in node_list:
-        if x.junction == junction:
+        if x.junction.index == junction.index:
             return x
     return None
 
 
 def price_function(source_junction, target_junction, t0):
+    global roads
     for lnk in source_junction.links:
         if lnk.target == target_junction.index:
-            return roads.realtime_link_speed(lnk, t0)
+            #print(
+            #    'price_function from: ' + str(source_junction.index) + ' to ' + str(
+            #        target_junction.index) + ' is [' + str((lnk.distance/1000) / roads.realtime_link_speed(
+            #        lnk, t0)) + '].')  # TODO remove this. for debug only
+            return (lnk.distance/1000) / roads.realtime_link_speed(lnk, t0)
     return sys.maxsize
 
 
 def heuristic_function(source_junction, target_junction, t0):
-    return compute_distance(source_junction.lat, source_junction.lon, target_junction.lat, target_junction.lon)
+    #print(
+    #    'heuristic_function from: ' + str(source_junction.index) + ' to ' + str(target_junction.index) + ' is [' + str(
+    #        compute_distance(
+    #            source_junction.lat, source_junction.lon, target_junction.lat,
+    #            target_junction.lon) / 110) + '].')  # TODO remove this. for debug only
+    return compute_distance(source_junction.lat, source_junction.lon, target_junction.lat, target_junction.lon) / 110 #110 is the highest speed
 
 
 def format_result(last_node):
@@ -49,6 +64,7 @@ def format_result(last_node):
     while top is not None:
         all_indices.append(top.junction.index)
         top = top.parent
+    all_indices.reverse()
     return all_indices
 
 
@@ -68,37 +84,27 @@ def run_astar(source_junction_index, target_junction_index, t0, price_func=price
         best_node = get_best_node(open_list)
         open_list.remove(best_node)
         closed_list.append(best_node)
-        if best_node.junction == target_junction:
+        if best_node.junction.index == target_junction.index:
             return format_result(best_node)
         for son in children_of_junction(best_node.junction):
             son_g_value = price_func(best_node.junction, son, t0) + best_node.g_value
             son_in_open = list_find_node(open_list, son)
-            if son_in_open is not None:
+            if not (son_in_open is None):
                 if son_in_open.g_value > son_g_value:
                     son_copy = Node(son_in_open.junction, best_node, son_g_value,
                                     heuristic_func(son_in_open.junction, target_junction, t0),
                                     heuristic_func(son_in_open.junction, target_junction, t0) + son_g_value)
                     open_list.remove(son_in_open)
                     open_list.append(son_copy)
-                    # son_in_open.g_value = son_g_value
-                    # son_in_open.h_value = heuristic_func(son_in_open.junction, target_junction, t0)
-                    # son_in_open.f_value = son_in_open.g_value + son_in_open.h_value
-                    # son_in_open.parent = best_node
                 continue
             son_in_closed = list_find_node(closed_list, son)
-            if son_in_closed is not None:
+            if not (son_in_closed is None):
                 if son_in_closed.g_value > son_g_value:
                     son_copy = Node(son_in_closed.junction, best_node, son_g_value,
                                     heuristic_func(son_in_open.junction, target_junction, t0),
                                     heuristic_func(son_in_open.junction, target_junction, t0) + son_g_value)
-                    open_list.remove(son_in_closed)
+                    closed_list.remove(son_in_closed)
                     open_list.append(son_copy)
-                    # closed_list.remove(son_in_closed)
-                    # son_in_closed.g_value = son_g_value
-                    # son_in_closed.h_value = heuristic_func(son_in_open.junction, target_junction, t0)
-                    # son_in_closed.f_value = son_in_open.g_value + son_in_open.h_value
-                    # son_in_closed.parent = best_node
-                    # open_list.append(son_in_closed)
                 continue
             son_h_value = heuristic_func(son, target_junction, t0)
             open_list.append(Node(son, best_node, son_g_value, son_h_value, son_g_value + son_h_value))
