@@ -2,6 +2,7 @@
   <dictionary name="maxle">
     <words>
       <w>astar</w>
+      <w>pqdict</w>
     </words>
   </dictionary>
 </component>
