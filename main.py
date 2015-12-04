@@ -7,7 +7,7 @@ We just parse input and call methods from other modules.
 
 # do NOT import ways. This should be done from other files
 # simply import your modules and call the appropriate functions
-from astar import run_astar
+from astar import run_astar, run_astar_with_time
 
 
 def simple(source, target, start_time):
@@ -17,7 +17,7 @@ def simple(source, target, start_time):
 
 def improved(source, target, start_time):
     'call function to find path, and return list of indices'
-    raise NotImplementedError
+    return run_astar_with_time(source, target, start_time)
 
 
 def dispatch(argv):
@@ -28,6 +28,9 @@ def dispatch(argv):
     elif argv[1] == 'improved':
         path = improved(source, target, start_time)
     print(' '.join(str(j) for j in path))
+    # region dean's print
+    print("Running from source {0} to target {1} took cost of {2} and heuristic value {3}, the path is {4}\n".format(source,target,1,2,path))
+    # endregion
 
 
 if __name__ == '__main__':
