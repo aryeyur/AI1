@@ -6,7 +6,6 @@ from ways.tools import base_traffic_pattern
 from pqdict import pqdict
 
 # region common
-Node = namedtuple('Node', ['junction', 'parent', 'g_value', 'h_value', 'f_value', ])
 global roads
 roads = None
 global roads_junctions
@@ -27,18 +26,25 @@ def comparator_f(node1, node2):
     return node1.f_value < node2.f_value
 
 
+def speed_and_distance_to_time(speed_in_kmh, distance_in_km):
+    return (distance_in_km / speed_in_kmh) * 60  # returns time in minutes
+
+
 # endregion
 
 # region simple A*
+Node = namedtuple('Node', ['junction', 'parent', 'g_value', 'h_value', 'f_value', ])
+
 
 def price_function(lnk, t0):
     global roads
-    return (lnk.distance / 1000) / roads.realtime_link_speed(lnk, t0)
+    return speed_and_distance_to_time(roads.realtime_link_speed(lnk, t0), lnk.distance / 1000)
 
 
 def heuristic_function(source_junction, target_junction):
-    return compute_distance(source_junction.lat, source_junction.lon, target_junction.lat,
-                            target_junction.lon) / 110  # 110 is the highest speed
+    return speed_and_distance_to_time(110,
+                                      compute_distance(source_junction.lat, source_junction.lon, target_junction.lat,
+                                                       target_junction.lon))
 
 
 def run_astar(source_junction_index, target_junction_index, t0, price_func=price_function,
@@ -85,13 +91,26 @@ def run_astar(source_junction_index, target_junction_index, t0, price_func=price
 
 # region A* with time
 
-def price_function_with_time(lnk, arrival_time):
+Node_with_time = namedtuple('Node_with_time', ['junction', 'parent', 'g_value', 'h_value', 'f_value', 't', ])
+
+
+def price_function_with_time(lnk, t0, t):
     global roads
-    return (lnk.distance / 1000) / roads.link_speed_history(lnk, arrival_time)
+    sigma = 0
+    focus = roads.return_focus(lnk.source)
+    for lnk_nearby in focus:
+        sigma += speed_and_distance_to_time(roads.realtime_link_speed(lnk_nearby, t0),
+                                            lnk_nearby.distance / 1000) / speed_and_distance_to_time(
+            roads.link_speed_history(lnk_nearby, t0), lnk_nearby.distance / 1000)
+    return sigma * (speed_and_distance_to_time(roads.link_speed_history(lnk, t), lnk.distance / 1000) / len(focus))
+
+
+def heuristic_function_with_time(source_junction, target_junction):
+    return heuristic_function(source_junction, target_junction) / 1440
 
 
 def run_astar_with_time(source_junction_index, target_junction_index, t0, price_func=price_function_with_time,
-                        heuristic_func=heuristic_function):
+                        heuristic_func=heuristic_function_with_time):
     global roads
     roads = load_map_from_csv()
     global roads_junctions
@@ -102,7 +121,8 @@ def run_astar_with_time(source_junction_index, target_junction_index, t0, price_
     open_pqdict = pqdict(precedes=comparator_f)
 
     source_h_value = heuristic_func(source_junction, target_junction)
-    open_pqdict.additem(source_junction_index, Node(source_junction, None, 0, source_h_value, source_h_value))
+    open_pqdict.additem(source_junction_index,
+                        Node_with_time(source_junction, None, 0, source_h_value, source_h_value, t0))
 
     while open_pqdict:  # while pqdict is not empty
         best_node = open_pqdict.popitem()[1]
@@ -111,22 +131,25 @@ def run_astar_with_time(source_junction_index, target_junction_index, t0, price_
             return format_result(best_node)
         for lnk_to_son in best_node.junction.links:
             son = roads_junctions[lnk_to_son.target]
-            son_g_value = price_func(lnk_to_son, (best_node.g_value + t0) % 1440) + best_node.g_value
+            son_g_value = price_func(lnk_to_son, t0, best_node.t) + best_node.g_value
             son_h_value = heuristic_func(son, target_junction)
             if son.index in open_pqdict.keys():
                 if open_pqdict[son.index].g_value > son_g_value:
-                    son_copy = Node(son, best_node, son_g_value, son_h_value, son_h_value + son_g_value)
+                    son_copy = Node_with_time(son, best_node, son_g_value, son_h_value, son_h_value + son_g_value,
+                                              price_function(lnk_to_son, best_node.t))
                     open_pqdict.updateitem(son.index, son_copy)
                 continue
 
             if son.index in closed_list:
                 if closed_list[son.index].g_value > son_g_value:
-                    son_copy = Node(son, best_node, son_g_value, son_h_value,
-                                    son_h_value + son_g_value)
+                    son_copy = Node_with_time(son, best_node, son_g_value, son_h_value,
+                                              son_h_value + son_g_value, price_function(lnk_to_son, best_node.t))
                     del closed_list[son.index]
                     open_pqdict.additem(son_copy.junction.index, son_copy)
                 continue
-            open_pqdict.additem(son.index, Node(son, best_node, son_g_value, son_h_value, son_g_value + son_h_value))
+            open_pqdict.additem(son.index,
+                                Node_with_time(son, best_node, son_g_value, son_h_value, son_g_value + son_h_value,
+                                               price_function(lnk_to_son, best_node.t)))
     return None
 
 # endregion
